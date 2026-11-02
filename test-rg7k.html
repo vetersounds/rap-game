@@ -4314,7 +4314,7 @@ function musTick(){if(!musOn)return;musFx();const sd=60/MUS_BPM/4;
     if(Math.random()<.16)mNoise(t,.01,{vol:.018,fq:2500});
     musNext+=sd;musStep++;}}
 function musicUpdate(){if(!ctx||!musBus)return;const want=AUD.music&&!playing&&!document.hidden&&!musDuck;
-  if(want&&!musOn){musOn=true;musNext=ctx.currentTime+.1;if(musStep%512>448||!musStep)musStep=0;clearInterval(musTimer);musTimer=setInterval(musTick,90);musBus.gain.cancelScheduledValues(ctx.currentTime);musBus.gain.setTargetAtTime(.55,ctx.currentTime,.8);}
+  if(want&&!musOn){musOn=true;musNext=ctx.currentTime+.1;if(musStep%512>448||!musStep)musStep=0;clearInterval(musTimer);musTimer=setInterval(musTick,90);musBus.gain.cancelScheduledValues(ctx.currentTime);musBus.gain.setTargetAtTime(.24,ctx.currentTime,.8);}
   else if(!want&&musOn){musOn=false;musBus.gain.cancelScheduledValues(ctx.currentTime);musBus.gain.setTargetAtTime(0,ctx.currentTime,.15);setTimeout(()=>{if(!musOn)clearInterval(musTimer);},700);}}
 setInterval(()=>{try{musicUpdate();}catch(e){}},500);
 document.addEventListener('visibilitychange',()=>{try{musicUpdate();}catch(e){}});
