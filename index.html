@@ -4410,7 +4410,7 @@ const GENRE_LOOPS={
   drill:['drill','dembow','drill808','glide','sub808','choirpad','pizz','pad','harpmel','impact','revcym','siren','fl_drill','fl_sad','fl_east','nx_strings','nx_choir','sv_lead','sv_reese','g_sadtrap','bg_hiphop','ld_toms','vn_drill','vn_spicc','vn_trem','mt_choir','mt_cello','tp_stabs'],
   phonk:['phonk','phonk808','memphis','double808','cowbellmel','cowbellriff','memphisbell','vinyl','scratch'],
   club:['jersey','dembow','afro','rage','subpulse','pluckbass','rage808','riser','downlift','laser','airhorn','impact','sv_chords','sv_stab','sv_arp','sv_acid','sv_wobble','sv_pluck','nx_arp','nx_pluck','nx_brass','ld_disco','bg_disco','bg_slap','fl_dance','fl_hit','tp_fanfare','tp_triumph','dk_juggle','dk_horn','mp_finger'],
-  rock:['breaks','rage','rage808','double808','g_power','eg_chug','g_lead','eg_emo','eg_surf','ld_rock','ld_break','ld_fill','ld_shuffle','bg_rock','bg_slap','impact','revcym','riser','scratch','nx_organ','sv_reese','sv_growl','vn_gypsy','tp_triumph','dk_crab']
+  rock:['breaks','rage','g_power','eg_chug','g_lead','eg_emo','eg_surf','ld_rock','ld_break','ld_fill','ld_shuffle','bg_rock','bg_slap','impact','revcym','riser','scratch','nx_organ','sv_reese','sv_growl','vn_gypsy','tp_triumph','dk_crab']
 };
 const GL_ADD={boombap:['ga_travis','mp_boom','mp_dilla','dk_baby','dk_chirp','rh_jazz','sx_lofi','ce_pizz'],trap:['ga_sadtrap','eg_emo','mp_trap','vn_drill','hp_sad','rh_trap','mt_sad','cg_sadtrap','uk_sad'],drill:['vn_drill','ce_drill','vn_ostinato','ce_pulse','hp_harm','mt_choir','tp_trap'],lyric:['ga_ballad','cg_lullaby','hp_lullaby','vn_legato','ce_lament','rh_ballad','mt_flute','uk_lullaby','sx_sad'],pop:['ga_pop','uk_island','uk_pop','tp_salsa','sx_funk','rh_funk','mp_conga','cg_bossa','ga_campfire'],
  rnb:['trap','lofi','sub808','pad','lofikeys','piano','g_rnb','g_cleanarp','bg_soul','rh_neo','rh_ballad','rh_trem','sx_smooth','sx_sexy','nx_epiano','nx_strings','vn_legato','hp_arp','mt_flute','ga_ballad'],
@@ -4438,25 +4438,37 @@ function autoBeat(){
 let qbEnergy='mid';
 const ROLE=k=>['drums','ldrums','mpc'].includes(k)?'drums':['bass','bgtr'].includes(k)?'bass':k==='mel'?'mel':['fx','decks'].includes(k)?'fx':'inst';
 let qbLast='';const qbPrev={};
-function pickLoop(k){const own=LOOPS.filter(l=>l.cat===k&&state.owned.includes(l.id));if(!own.length)return null;const g=own.filter(l=>inGenre(l.id));let pool=g.length?g:((k==='drums'||k==='bass')?own:null);if(!pool)return null;if(pool.length>1)pool=pool.filter(l=>l.id!==qbPrev[k]);const id=pool[Math.floor(Math.random()*pool.length)].id;qbPrev[k]=id;return id;}
+function pickLoop(k){const own=LOOPS.filter(l=>l.cat===k&&state.owned.includes(l.id));if(!own.length)return null;const g=own.filter(l=>inGenre(l.id));let pool=g.length?g:((k==='drums'||k==='bass')?own:null);if(!pool)return null;if(ROLE(k)==='drums'){const main=pool.filter(l=>!/fill|toms/.test(l.id));if(main.length)pool=main;}if(pool.length>1)pool=pool.filter(l=>l.id!==qbPrev[k]);const w=pool.map(l=>Math.pow(l.q||3,2)),tot=w.reduce((x,y)=>x+y,0);let r=Math.random()*tot,id=pool[0].id;for(let j=0;j<pool.length;j++){r-=w[j];if(r<=0){id=pool[j].id;break;}}qbPrev[k]=id;return id;}
 const rnd=a=>a[Math.floor(Math.random()*a.length)];
 function quickBeat(){
   const n=bars(),lim=compTracks(),en=Math.random()<.25?'chill':Math.random()<.7?'mid':'hard',ti=k=>TRACKS.findIndex(t=>t.key===k),h=Math.floor(n/2);
-  const T={drums:[b=>true,b=>b>0||n<=2,b=>n<4||b!==h],bass:[b=>b>0||n<=2,b=>true,b=>b%2===0||b>=h],mel:[b=>true,b=>true,b=>b<n-1||n<=2],fx:[b=>b%4===3,b=>b%2===1,b=>b===0||b===h],inst:[b=>b>=h,b=>b%2===0,b=>true,b=>b%2===1,b=>b<h||b===n-1]};
   let tries=0,sig='',used=0;
   do{tries++;
+    const vis=k=>{const t=TRACKS[ti(k)];return t&&trackVisible(t);};
     const inst=TRACKS.filter(t=>t.inst&&trackVisible(t)&&ROLE(t.key)==='inst').map(t=>t.key).sort(()=>Math.random()-.5);
-    const kInst=en==='chill'?1+(Math.random()<.4?1:0):en==='mid'?2+(Math.random()<.4?1:0):3+(Math.random()<.5?1:0);
-    let plan=['drums','bass','mel'];if(en!=='chill'||Math.random()<.3)plan.push('fx');
-    if(Math.random()<.3&&plan.includes('mel'))plan.splice(plan.indexOf('mel'),1);
-    plan=plan.concat(inst.slice(0,kInst));
-    const ex=['ldrums','mpc','bgtr','decks'].filter(k=>{const t=TRACKS[ti(k)];return t&&trackVisible(t)&&!plan.includes(k);});
-    if(ex.length&&(en==='hard'||Math.random()<.35))plan.push(rnd(ex));
+    // основа: одни барабаны, один бас, одна гармония и максимум одна ведущая партия поверх
+    const plan=[];const P=(k,pat)=>plan.push([k,pat]);
+    const intro=n>=4&&Math.random()<.35;
+    const live=state.genre==='rock'?.9:['lyric','boombap'].includes(state.genre)?.3:0,bg=state.genre==='rock'?1:['lyric','boombap','pop'].includes(state.genre)?.3:0;
+    P(vis('ldrums')&&Math.random()<live?'ldrums|drums':'drums',b=>!(intro&&b===0));
+    P(vis('bgtr')&&Math.random()<bg?'bgtr|bass':'bass',b=>!(intro&&b===0));
+    const hasMel=Math.random()<.85;
+    if(hasMel)P('mel',b=>true);
+    const leadP=en==='chill'?.4:en==='mid'?.7:.85;
+    const leads=[];
+    if(Math.random()<leadP&&inst.length)leads.push(inst[0]);
+    if(!hasMel&&inst.length>1)leads.push(inst[1]);
+    leads.forEach((k,idx)=>{const style=Math.random();P(k,n<4?(b=>true):style<.45?(b=>b>=h):style<.75?(b=>b%2===1):(b=>true));});
+    if(Math.random()<(en==='chill'?.25:en==='mid'?.45:.65))P('fx',n<4?(b=>b===n-1):rnd([b=>b===n-1,b=>b===h-1||b===n-1,b=>b%4===3]));
+    if(['boombap','phonk'].includes(state.genre)&&vis('decks')&&Math.random()<.3)P('decks',b=>b%4===3||b===n-1);
     TRACKS.forEach((t,i)=>{state.grid[i]=state.grid[i].map(()=>false);});
     used=0;sig='';
-    plan.forEach(k=>{const i=ti(k);if(i<0||used>=lim)return;const id=pickLoop(k);if(!id)return;state.trackLoop[i]=id;used++;const r=ROLE(k);
-      let pat=r==='fx'?rnd(T.fx):(b=>true);if(en==='chill'&&r==='fx')pat=b=>b===n-1;
-      state.grid[i]=state.grid[i].map((_,b)=>b<n&&pat(b));sig+=id+':'+state.grid[i].slice(0,n).map(x=>x?1:0).join('')+'|';});
+    plan.forEach(([kk,pat])=>{let k,i,id;for(const c of kk.split('|')){i=ti(c);if(i<0||!vis(c))continue;id=pickLoop(c);if(id){k=c;break;}}if(!k||used>=lim)return;state.trackLoop[i]=id;used++;
+      state.grid[i]=state.grid[i].map((_,b)=>b<n&&pat(b));if(!state.grid[i].slice(0,n).some(Boolean))state.grid[i][n-1]=true;
+      sig+=id+':'+state.grid[i].slice(0,n).map(x=>x?1:0).join('')+'|';});
+    // если мелодии нет совсем, добавим хотя бы одну партию
+    if(!TRACKS.some((t,i)=>(t.key==='mel'||ROLE(t.key)==='inst')&&state.grid[i].some(Boolean))){
+      for(const k of ['mel',...inst]){const i=ti(k);if(i<0||used>=lim||!vis(k))continue;const id=pickLoop(k);if(!id)continue;state.trackLoop[i]=id;used++;state.grid[i]=state.grid[i].map((_,b)=>b<n);break;}}
   }while(sig===qbLast&&tries<6);
   qbLast=sig;
   const G=GENRES.find(g=>g.id===state.genre);if(G){state.bpm=Math.max(70,Math.min(110,G.bpm+Math.round((Math.random()*2-1)*5)));const bp=$('#bpm');if(bp){bp.value=state.bpm;$('#bpmVal').textContent=state.bpm;}}
